@@ -120,6 +120,13 @@ body.mobile .island,body.mobile .caption{display:none}
 .fail-dots i.on{background:var(--accent);border-color:var(--accent);box-shadow:0 0 10px var(--accent-glow)}
 .scroll-hint .fail-dots.done i{background:var(--accent);border-color:var(--accent);box-shadow:0 0 10px var(--accent-glow)}
 
+/* ---------- 分级加载：下游序列后台加载提示 ---------- */
+.bgload{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:5;
+  font-size:11px;letter-spacing:.34em;text-indent:.34em;color:var(--ink-dim);
+  border:1px solid rgba(255,255,255,.16);border-radius:999px;padding:8px 18px;
+  background:rgba(0,0,0,.55);opacity:0;transition:opacity .4s ease;pointer-events:none}
+.bgload.show{opacity:1}
+
 /* ============================================================
    合并序列：提升机转场(1-91) + 收尾(92-300) + 停留段
    z层级：seqFinal清单(1) < canvas(2) < sysTitle(3) < devLabels(4)
@@ -247,6 +254,9 @@ body.mobile .island,body.mobile .caption{display:none}
       <section id="sequence">
         <div class="sticky">
 
+          <!-- 分级加载：下游序列后台加载提示 -->
+          <div class="bgload" id="bgLoad">SCENE LOADING</div>
+
           <!-- 设备清单（下层，四向车驶过时显现） -->
           <div id="seqFinal">
             <div class="final-inner" id="gooArea">
@@ -332,12 +342,14 @@ function addLoad(n){ loadTotal+=n; tickLoad(); }
 function doneLoad(){ loadDone++; tickLoad(); }
 
 /* ---------- 2. 序列帧定义（theo独立；lift+ending合并为300帧序列） ---------- */
+/* 分级加载：入场只等 theo+字体，lift/ending 在入场放行后后台续载 */
 const SEQ={
   theo:{dir:'theo_webp', total:162, pad:4, imgs:[], drawn:-1, current:1, target:1},
   lift:{dir:'lift_webp', total:91,  pad:3, imgs:[]},
   end: {dir:'ending_webp',total:209,pad:3, imgs:[]},
 };
 const SEQ_TOTAL=300;                       // 合并序列总帧数
+let seqReady=false;                        // lift+ending 是否已后台加载完
 function seqImg(n){ return n<=91 ? SEQ.lift.imgs[n] : SEQ.end.imgs[n-91]; }
 function preloadSeq(set,key,dir,total,pad,onFirst){
   for(let i=1;i<=total;i++){
@@ -353,11 +365,20 @@ function preloadSeq(set,key,dir,total,pad,onFirst){
     set[key].imgs[i]=img;
   }
 }
+/* 后台序列加载：不计入开场进度条，全部完成后回调 */
+function loadBGSeq(key,dir,total,pad,onAll){
+  let n=0;
+  for(let i=1;i<=total;i++){
+    const img=new Image();
+    img.src='assets/'+dir+'/frame_'+String(i).padStart(pad,'0')+'.webp';
+    const fin=()=>{ if(++n===total && onAll) onAll(); };
+    img.onload=img.onerror=fin;
+    SEQ[key].imgs[i]=img;
+  }
+}
 addLoad(1);
 (document.fonts&&document.fonts.ready)?document.fonts.ready.then(doneLoad).catch(doneLoad):doneLoad();
 preloadSeq(SEQ,'theo','theo_webp',162,4, ()=>{SEQ.theo.drawn=-1;drawIfChanged(SEQ.theo,SEQ.theo,1,0.12);});
-preloadSeq(SEQ,'lift','lift_webp',91,3, null);
-preloadSeq(SEQ,'end','ending_webp',209,3, ()=>drawMerged(Math.round(seqFrameF)));
 allQueued=true; tickLoad();
 
 /* ---------- 3. 画布绘制 ---------- */
@@ -387,6 +408,8 @@ const seqCV=setupCanvas(seqEl); seqCV.el=seqEl;
 let seqDrawn=-1;
 function drawMerged(n){
   n=Math.max(1,Math.min(SEQ_TOTAL,Math.round(n)));
+  const bg=document.getElementById('bgLoad');
+  if(bg) bg.classList.toggle('show', !seqReady);   // 未就绪先给提示，避免黑屏懵
   if(n===seqDrawn) return;
   if(fitDraw2(seqCV, seqImg(n))) seqDrawn=n;   // 画成功才记账
 }
@@ -716,6 +739,15 @@ function tryIntroExit(){
   setTimeout(()=>{ document.getElementById('heroHead').classList.add('shown'); },350);
   setTimeout(showHint,900);
   setTimeout(()=>{ scrollHint.classList.add('show'); },1100);
+  /* 入场放行后再拉取下游序列：先 lift 后 ending，避免与首页抢占带宽 */
+  setTimeout(()=>{
+    loadBGSeq('lift','lift_webp',91,3, ()=>{
+      loadBGSeq('end','ending_webp',209,3, ()=>{
+        seqReady=true; drawMerged(Math.round(seqFrameF));
+      });
+      drawMerged(Math.round(seqFrameF));
+    });
+  },600);
 }
 setTimeout(()=>{ minTimeDone=true; tryIntroExit(); },1400);
 setTimeout(()=>{ loadSettled=true; tryIntroExit(); },25000);
