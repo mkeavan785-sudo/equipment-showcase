@@ -316,7 +316,21 @@ body.mobile .island,body.mobile .caption{display:none}
    ============================================================ */
 
 /* ---------- 0. 全局状态 ---------- */
-const IS_TOUCH = matchMedia('(hover: none) and (pointer: coarse)').matches;
+const IS_TOUCH = matchMedia('(hover: none) and (pointer: coarse)').matches
+  || (navigator.maxTouchPoints>0 && !matchMedia('(pointer: fine)').matches);
+let touchMode=IS_TOUCH;                     /* 触屏模式（夸克等安卓浏览器媒体查询会误报为桌面，靠首次触摸事件兜底切换） */
+function isTouch(){ return touchMode; }
+/* 首个触摸事件即切换触屏模式：收掉鼠标提示/解锁滚动/放行坠落滞留/重算滚动行程 */
+addEventListener('touchstart', function onTouch(){
+  if(touchMode) return;
+  touchMode=true;
+  document.body.classList.add('mobile');
+  unlocked=true;
+  const st=document.getElementById('scrollText'); if(st) st.textContent='滑动屏幕 · 设备进场';
+  if(hintShown){ hintShown=false; hintGone=true; mouseHint.classList.remove('show'); }
+  if(fallDetentHold){ fallDetentHold=false; fallDetentUsed=true; }
+  layoutSequence();
+},{capture:true,passive:true});
 if(IS_TOUCH || innerWidth<=768) document.body.classList.add('mobile');
 let introExited=false, unlocked=false;
 
@@ -445,7 +459,7 @@ const dotEls=failDots.querySelectorAll('i');
 let failCount=0;
 phoneEl.addEventListener('wheel', e=>{
   if(!introExited) return;
-  if(unlocked || IS_TOUCH){
+  if(unlocked || isTouch()){
     /* 坠落节点滞留的放行：滞留中向下滚一下即解除 */
     if(fallDetentHold && e.deltaY>0){ fallDetentHold=false; fallDetentUsed=true; }
     return;
@@ -477,8 +491,8 @@ let stayPv=0;                               // 停留段进度0-1（choreo用于
 const seqSecEl=document.getElementById('sequence');
 const finalHead=document.querySelector('.final-head');
 let stayDist=300;                           // 停留段标题下移总距离，layoutSequence按手机壳重设
-function layoutSequence(){                  // 高度锚定手机壳：滚轮端8.57屏擦洗行程（灵敏度较6.7屏降30%）+ 1屏停留；触屏保持6.7屏原节奏
-  seqSecEl.style.height=(phoneEl.clientHeight*(IS_TOUCH?6.7:9.57))+'px';
+function layoutSequence(){                  // 高度锚定手机壳：滚轮端7.88屏擦洗行程（降敏15%）+ 1屏停留；触屏保持6.7屏原节奏
+  seqSecEl.style.height=(phoneEl.clientHeight*(isTouch()?6.7:7.88))+'px';   /* 滚轮端7.88屏=降敏15%；触屏6.7屏原节奏 */
   stayDist=phoneEl.clientHeight*0.42;
 }
 const SCRUB_R=5.7/6.7;                                  // 行程比：前85.07%映射300帧
@@ -492,7 +506,7 @@ function updateScrub(){
   const SCRUB=SCRUB_R;                      // 前85.07%行程映射300帧
   seqFrameF=p<=SCRUB ? 1+p/SCRUB*(SEQ_TOTAL-1) : SEQ_TOTAL;
   // 坠落节点滞留（仅滚轮端，触屏不受影响）：首次滚到帧235前持续钉住，滚轮再给一下才放行；回滚到节点上方重置
-  if(!IS_TOUCH && rel>phoneEl.clientHeight*0.5){
+  if(!isTouch() && rel>phoneEl.clientHeight*0.5){
     const fallTop=seqSecEl.offsetTop+travel*FALL_P_R;
     if(!fallDetentUsed && rel>=travel*FALL_P_R){
       fallDetentHold=true;
@@ -747,7 +761,7 @@ requestAnimationFrame(raf);
 const mouseHint=document.getElementById('mouseHint');
 let hintShown=false, hintGone=false;
 function showHint(){
-  if(hintShown||hintGone||IS_TOUCH) return;
+  if(hintShown||hintGone||isTouch()) return;
   hintShown=true; mouseHint.classList.add('show');
 }
 function hideHint(){
