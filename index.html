@@ -189,6 +189,7 @@ body.mobile .island,body.mobile .caption{display:none}
 #rollTitle .lt,#rollTitle .slot{display:inline-block;line-height:1;vertical-align:top}
 #rollTitle .lt.yl,#rollTitle .slot.yl{color:var(--accent);text-shadow:0 0 18px var(--accent-glow)}
 #rollTitle .slot{height:1em;overflow:hidden}
+#rollTitle .slot.yl+.slot.yl{margin-left:-.03em}   /* YOU内部字距微收（O/U向Y靠拢） */
 #rollTitle .strip{display:block;will-change:transform}
 #rollTitle .cell{display:block;height:1em;line-height:1}
 .equip-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;position:relative;z-index:3;will-change:transform,opacity}
@@ -444,7 +445,11 @@ const dotEls=failDots.querySelectorAll('i');
 let failCount=0;
 phoneEl.addEventListener('wheel', e=>{
   if(!introExited) return;
-  if(unlocked || IS_TOUCH) return;
+  if(unlocked || IS_TOUCH){
+    /* 坠落节点滞留的放行：滞留中向下滚一下即解除 */
+    if(fallDetentHold && e.deltaY>0){ fallDetentHold=false; fallDetentUsed=true; }
+    return;
+  }
   if(e.deltaY<=0) return;
   e.preventDefault();
   failCount++;
@@ -472,17 +477,30 @@ let stayPv=0;                               // 停留段进度0-1（choreo用于
 const seqSecEl=document.getElementById('sequence');
 const finalHead=document.querySelector('.final-head');
 let stayDist=300;                           // 停留段标题下移总距离，layoutSequence按手机壳重设
-function layoutSequence(){                  // 高度锚定手机壳：5.7屏擦洗行程 + 1屏停留
-  seqSecEl.style.height=(phoneEl.clientHeight*6.7)+'px';
+function layoutSequence(){                  // 高度锚定手机壳：滚轮端8.57屏擦洗行程（灵敏度较6.7屏降30%）+ 1屏停留；触屏保持6.7屏原节奏
+  seqSecEl.style.height=(phoneEl.clientHeight*(IS_TOUCH?6.7:9.57))+'px';
   stayDist=phoneEl.clientHeight*0.42;
 }
+const SCRUB_R=5.7/6.7;                                  // 行程比：前85.07%映射300帧
+const FALL_P_R=SCRUB_R*(235-1)/(SEQ_TOTAL-1);           // 帧235=坠落起点对应的行程比
+let fallDetentHold=false, fallDetentUsed=false;         // 坠落节点滞留：首次到达钉住，再滚一下才放行
 function updateScrub(){
   const pr=phoneEl.getBoundingClientRect();
   const rel=pr.top-seqSecEl.getBoundingClientRect().top;    // 序列顶过手机屏顶后的滚动量
   const travel=seqSecEl.offsetHeight-phoneEl.clientHeight;  // 总行程（含停留）
   const p=Math.max(0,Math.min(1,rel/Math.max(1,travel)));
-  const SCRUB=5.7/6.7;                      // 前85.07%行程映射300帧
+  const SCRUB=SCRUB_R;                      // 前85.07%行程映射300帧
   seqFrameF=p<=SCRUB ? 1+p/SCRUB*(SEQ_TOTAL-1) : SEQ_TOTAL;
+  // 坠落节点滞留（仅滚轮端，触屏不受影响）：首次滚到帧235前持续钉住，滚轮再给一下才放行；回滚到节点上方重置
+  if(!IS_TOUCH && rel>phoneEl.clientHeight*0.5){
+    const fallTop=seqSecEl.offsetTop+travel*FALL_P_R;
+    if(!fallDetentUsed && rel>=travel*FALL_P_R){
+      fallDetentHold=true;
+      phoneEl.scrollTop=fallTop-2;          // 动量滚动反复越界会被反复钉回，直到滚轮放行
+    }else if(fallDetentUsed && rel<travel*FALL_P_R-40){
+      fallDetentUsed=false; fallDetentHold=false;
+    }
+  }
   // 停留段：标题随滚动实时下移，覆盖卡片框
   stayPv=p<=SCRUB ? 0 : Math.min(1,(p-SCRUB)/(1-SCRUB));
   finalHead.style.transform='translateY('+(stayPv*stayDist).toFixed(1)+'px)';
@@ -629,7 +647,8 @@ const ROLL_MAP=[
   ['L',null,1,0],
   ['I','Y',1,1],['S','O',1,1],['T','U',1,1],
 ];
-const rollSlots=[], fadeLts=[];
+const rollSlots=[], fadeLts=[], shrinkLts=[];   /* shrinkLts:淡出字母同步收宽，把THANK/YOU拉近并防YOU出屏 */
+let shrinkMeasured=false;
 (function buildRollTitle(){
   const ab='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   ROLL_MAP.forEach(([from,to,yellow,isRoll])=>{
@@ -637,6 +656,7 @@ const rollSlots=[], fadeLts=[];
       const s=document.createElement('span');
       s.className='lt'+(yellow?' yl':'');
       s.textContent=(from===' ')?'\u00A0':from;
+      shrinkLts.push({el:s,w:0,floor:(from===' ')?0.3:0});   /* 空格收拢后保留窄缝 */
       if(from!==' ') fadeLts.push(s);            // 多余字母记录淡出（空格除外）
       rollTitleEl.appendChild(s);
       return;
@@ -660,6 +680,14 @@ function applyTitleRoll(p){
   });
   const fo=Math.max(0,1-p*2.6);                  // 多余字母在翻转前段快速消失
   fadeLts.forEach(el=>el.style.opacity=fo.toFixed(3));
+  /* 淡出字母宽度同步收拢：THANK与YOU靠拢、总宽变窄，手机端YOU不再被推出屏幕 */
+  if(!shrinkMeasured && p>0){
+    shrinkLts.forEach(o=>{ o.w=o.el.getBoundingClientRect().width; if(o.floor) o.floor=o.w*o.floor; });
+    shrinkMeasured=true;
+  }
+  if(shrinkMeasured){
+    shrinkLts.forEach(o=>{ o.el.style.width=Math.max(o.w*fo,o.floor).toFixed(1)+'px'; });
+  }
 }
 
 /* ---------- 9. 文本编排（帧阈值驱动） ---------- */
@@ -727,7 +755,7 @@ function hideHint(){
   hintGone=true;
   mouseHint.classList.remove('show');
 }
-setInterval(()=>{ if(hintShown && accMouseX>140) hideHint(); },300);   // 左右移动过后才收起
+setInterval(()=>{ if(hintShown && accMouseX>50) hideHint(); },300);   // 左右稍一移动即收起（仅提醒一次）
 
 let minTimeDone=false;
 function tryIntroExit(){
