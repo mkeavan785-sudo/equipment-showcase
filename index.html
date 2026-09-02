@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>测试-设备方面</title>
+<!-- © Eavan 2026 · 原创作品，未经授权禁止复制、转载或扒取代码 -->
+<link rel="icon" href="data:,">
+<style>
+/* ============================================================
+   测试-设备方面 · 设备展示网页（手机端优先） v2
+   流程：首页经纬仪(左右移动转) → 3次滚轮失效 → 解锁 →
+        【合并序列300帧】提升机转场(1-91)无缝接收尾(92-300)：
+        设备名称标签由中间到外围依次弹出(122-152) → 中心到外围依次坠落堆积(235-255) →
+        淡出(262) → 四向车驶过带出下层设备清单(269-299) → 停留段：
+        卡片上滑退出并淡化(回滚复位) → 标题下移过中线后滚筒翻24字母组成THANK YOU(可倒放)；
+        卡片交互：琥珀聚光跟随光标+磁吸倾斜+点选光圈脉冲；首页提示左右移鼠标转经纬仪；
+        lift序列1-8帧黑场已归一化为#000与页面背景无缝
+   架构：滚动容器 = #phone；PC演示用手机模拟屏，真机全屏
+   设计Token：纯黑底 + 白字 + 琥珀黄点缀 + Anton/NotoSansSC
+   ============================================================ */
+:root{
+  --bg:#000000;
+  --ink:rgba(255,255,255,.95);
+  --ink-dim:rgba(255,255,255,.55);
+  --accent:#ffc247;
+  --accent-glow:rgba(255,194,71,.45);
+  --ease-out:cubic-bezier(.22,1,.36,1);
+  --spring:cubic-bezier(.68,-.55,.265,1.55);
+  --font-display:'Anton','Impact','Arial Black',sans-serif;
+  --font-body:'NotoSansSC-VF','PingFang SC','Microsoft YaHei',sans-serif;
+  --pw:min(424px,100vw);
+  --ph:100vh;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:var(--bg)}
+
+@font-face{
+  font-family:'NotoSansSC-VF';
+  src:url('assets/fonts/NotoSansSC-VF.woff2') format('woff2');
+  font-weight:100 900;font-style:normal;font-display:swap;
+}
+body{font-family:var(--font-body);color:var(--ink);-webkit-font-smoothing:antialiased}
+
+/* ---------- PC演示舞台 / 真机全屏 ---------- */
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(120% 90% at 50% 40%,#0b0b0d 0%,#000 70%)}
+.caption{position:fixed;left:50%;bottom:3.2vh;transform:translateX(-50%);
+  font-size:12px;letter-spacing:.3em;text-indent:.3em;color:rgba(255,255,255,.28);white-space:nowrap}
+#phoneWrap{position:relative;height:min(88vh,880px);width:var(--pw);
+  border-radius:38px;border:2px solid rgba(255,255,255,.14);
+  box-shadow:0 40px 120px rgba(0,0,0,.8),0 0 0 8px #0a0a0a,0 0 0 9px rgba(255,255,255,.05);
+  overflow:hidden;background:var(--bg)}
+.island{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:60;
+  width:86px;height:24px;border-radius:14px;background:#050505;
+  border:1px solid rgba(255,255,255,.06);pointer-events:none}
+body.mobile #phoneWrap{height:100vh;height:100dvh;width:100vw;border:none;border-radius:0;box-shadow:none}
+body.mobile .island,body.mobile .caption{display:none}
+
+#phone{height:100%;overflow-y:auto;overscroll-behavior:contain;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch}
+#phone::-webkit-scrollbar{display:none}
+
+/* ---------- 遮罩上滑文字动效 ---------- */
+.line{overflow:hidden;display:block}
+.line span{display:inline-block;transform:translateY(118%);transition:transform .9s var(--ease-out)}
+.shown .line span{transform:translateY(0)}
+.shown .line:nth-child(2) span{transition-delay:.12s}
+.shown .line:nth-child(3) span{transition-delay:.24s}
+
+/* ---------- 入场加载页 ---------- */
+#loader{position:absolute;inset:0;z-index:99;background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+  transition:opacity .8s ease}
+#loader.done{opacity:0;pointer-events:none}
+#loader .ld-tag{font-size:10px;letter-spacing:.34em;text-indent:.34em;color:var(--ink-dim);text-transform:uppercase}
+#loader .ld-num{font-family:var(--font-display);font-size:calc(var(--pw)*.1);
+  font-variant-numeric:tabular-nums;text-shadow:0 0 24px var(--accent-glow)}
+#loader .ld-bar{width:58%;height:1px;background:rgba(255,255,255,.14);overflow:hidden}
+#loader .ld-bar i{display:block;height:100%;width:0%;background:var(--accent);box-shadow:0 0 12px var(--accent-glow);transition:width .3s ease}
+
+/* ============================================================
+   首页：经纬仪
+   ============================================================ */
+#hero{position:relative;height:var(--ph);overflow:hidden}
+#hero .stage{position:absolute;inset:0}
+#hero canvas{position:absolute;inset:0;width:100%;height:100%}
+.hero-head{position:absolute;top:max(5.4vh, env(safe-area-inset-top));left:0;right:0;z-index:10;
+  display:flex;flex-direction:column;align-items:center;text-align:center;pointer-events:none}
+.hero-head .en{font-family:var(--font-display);font-size:calc(var(--pw)*.031);
+  letter-spacing:.4em;text-indent:.4em;color:var(--accent);text-transform:uppercase;
+  text-shadow:0 0 18px var(--accent-glow)}
+.hero-head .cn{margin-top:1.8vh;font-weight:900;font-size:calc(var(--pw)*.082);letter-spacing:.16em;text-indent:.16em}
+.hero-head .sub{margin-top:1.2vh;font-size:calc(var(--pw)*.033);color:var(--ink-dim);letter-spacing:.14em;text-indent:.14em}
+.mouse-hint{position:absolute;right:4%;top:50%;transform:translateY(-50%);z-index:10;
+  display:flex;flex-direction:column;align-items:center;gap:12px;
+  padding:16px 16px;border-radius:18px;
+  background:rgba(0,0,0,.55);backdrop-filter:blur(14px) saturate(1.3);
+  border:1px solid rgba(255,255,255,.08);
+  opacity:0;transition:opacity .6s var(--ease-out);pointer-events:none}
+.mouse-hint.show{opacity:1}
+.mouse-hint .arrows{display:flex;gap:8px}
+.mouse-hint .arrows i{width:14px;height:2px;background:rgba(255,255,255,.35);border-radius:2px;animation:arrL 1.1s ease-in-out infinite}
+.mouse-hint .arrows i:last-child{animation-name:arrR}
+@keyframes arrL{0%,100%{opacity:.25;transform:translateX(-3px)}50%{opacity:1;transform:translateX(3px);background:var(--accent)}}
+@keyframes arrR{0%,100%{opacity:.25;transform:translateX(3px)}50%{opacity:1;transform:translateX(-3px);background:var(--accent)}}
+.mouse-hint p{font-size:12px;letter-spacing:.18em;text-indent:.18em;white-space:nowrap}
+.scroll-hint{position:absolute;left:50%;bottom:max(4.5vh, env(safe-area-inset-bottom));transform:translateX(-50%);z-index:10;
+  display:flex;flex-direction:column;align-items:center;gap:11px;
+  opacity:0;transition:opacity .6s var(--ease-out);pointer-events:none}
+.scroll-hint.show{opacity:1}
+.scroll-hint.gone{opacity:0}
+.wheel-ico{width:20px;height:33px;border:1.5px solid rgba(255,255,255,.55);border-radius:11px;position:relative}
+.wheel-ico i{position:absolute;left:50%;top:6px;width:2px;height:6px;margin-left:-1px;border-radius:2px;background:var(--accent);animation:wheelDot 1.4s ease-in-out infinite}
+@keyframes wheelDot{0%{transform:translateY(0);opacity:1}70%{transform:translateY(10px);opacity:0}100%{transform:translateY(0);opacity:0}}
+.scroll-hint p{font-size:13px;letter-spacing:.26em;text-indent:.26em}
+.scroll-hint .fail-dots{display:flex;gap:9px;opacity:0;transition:opacity .4s ease}
+.scroll-hint .fail-dots.vis{opacity:1}
+.fail-dots i{width:8px;height:8px;border-radius:50%;border:1px solid rgba(255,255,255,.35);transition:all .25s ease}
+.fail-dots i.on{background:var(--accent);border-color:var(--accent);box-shadow:0 0 10px var(--accent-glow)}
+.scroll-hint .fail-dots.done i{background:var(--accent);border-color:var(--accent);box-shadow:0 0 10px var(--accent-glow)}
+
+/* ============================================================
+   合并序列：提升机转场(1-91) + 收尾(92-300) + 停留段
+   z层级：seqFinal清单(1) < canvas(2) < sysTitle(3) < devLabels(4)
+   ============================================================ */
+#sequence{position:relative;height:670vh}   /* JS按手机壳实际高度重设：5.7屏擦洗+1屏停留 */
+#sequence .sticky{position:sticky;top:0;height:var(--ph);overflow:hidden}
+#sequence canvas{position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none}
+
+.lift-copy{position:absolute;left:6%;bottom:15%;z-index:5;max-width:88%;
+  opacity:0;transform:translateY(24px);transition:opacity .7s var(--ease-out),transform .7s var(--ease-out);
+  pointer-events:none}
+.lift-copy.shown{opacity:1;transform:translateY(0)}
+.lift-copy .en{font-family:var(--font-display);font-size:calc(var(--pw)*.155);letter-spacing:.03em;line-height:1}
+.lift-copy .cn{margin-top:1.6vh;font-weight:900;font-size:calc(var(--pw)*.065);letter-spacing:.28em;text-indent:.28em}
+.lift-copy .desc{margin-top:1.6vh;font-size:calc(var(--pw)*.034);line-height:1.85;color:var(--ink-dim);letter-spacing:.05em}
+.lift-copy .desc b{color:var(--accent);font-weight:700}
+
+.sys-title{position:absolute;top:9%;left:0;right:0;z-index:3;text-align:center;
+  opacity:0;transform:translateY(24px);transition:opacity .7s var(--ease-out),transform .7s var(--ease-out);
+  pointer-events:none}
+.sys-title.shown{opacity:1;transform:translateY(0)}
+.sys-title .en{font-family:var(--font-display);font-size:calc(var(--pw)*.034);
+  letter-spacing:.38em;text-indent:.38em;color:var(--accent);text-transform:uppercase;
+  text-shadow:0 0 18px var(--accent-glow)}
+.sys-title .cn{margin-top:1.5vh;font-weight:900;font-size:calc(var(--pw)*.075);letter-spacing:.24em;text-indent:.24em}
+.sys-title .sub{margin-top:.1vh;font-size:calc(var(--pw)*.032);color:var(--ink-dim);letter-spacing:.14em;text-indent:.14em}
+
+/* ---------- 设备名称标签（中英双字，弹出→坠落堆积→淡出） ---------- */
+#devLabels{position:absolute;inset:0;z-index:4;pointer-events:none;
+  transition:opacity .6s ease}
+.dev-label{
+  position:absolute;top:22%;transform:translate(-50%,0) scale(0);opacity:0;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:9px 13px 8px;border-radius:12px;
+  background:rgba(0,0,0,.6);backdrop-filter:blur(10px) saturate(1.3);
+  border:1px solid rgba(255,194,71,.4);
+  box-shadow:0 4px 24px rgba(0,0,0,.5);
+  white-space:nowrap;will-change:transform;
+}
+.dev-label .cn{font-weight:800;font-size:calc(var(--pw)*.037);letter-spacing:.1em;line-height:1.2}
+.dev-label .en{font-family:var(--font-display);font-size:calc(var(--pw)*.026);letter-spacing:.08em;
+  color:var(--accent);text-transform:uppercase;line-height:1.1}
+/* 标签与设备的指向短须（--stem-x动态偏移，边缘钳制时仍指向设备） */
+.dev-label::after{content:'';position:absolute;left:var(--stem-x,50%);top:100%;transform:translateX(-50%);
+  width:1px;height:14px;background:linear-gradient(rgba(255,194,71,.6),transparent)}
+.dev-label.phys{margin:0;transform:none}   /* 物理接管时清CSS变换 */
+
+/* ---------- 设备清单（下层显现 + 粘液卡片交互） ---------- */
+#seqFinal{position:absolute;inset:0;z-index:1;display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none}
+#seqFinal.interactive{pointer-events:auto}
+.final-inner{width:100%;padding:0 5.5%;position:relative}
+/* 标题随停留段滚动向下平移，覆盖在卡片框之上（z=5>grid z=3） */
+.final-head{position:relative;z-index:5;pointer-events:none;will-change:transform;
+  margin-bottom:calc(var(--ph)*.035)}
+.final-head .en{font-family:var(--font-display);font-size:calc(var(--pw)*.095);letter-spacing:.04em;line-height:1;white-space:nowrap}
+.final-head .en em{font-style:normal;color:var(--accent);text-shadow:0 0 18px var(--accent-glow)}
+.final-head .zh{margin-top:1vh;font-size:calc(var(--pw)*.032);color:var(--ink-dim);letter-spacing:.2em}
+/* 滚筒翻转标题（EQUIPMENT LIST → THANK YOU） */
+#rollTitle .lt,#rollTitle .slot{display:inline-block;line-height:1;vertical-align:top}
+#rollTitle .lt.yl,#rollTitle .slot.yl{color:var(--accent);text-shadow:0 0 18px var(--accent-glow)}
+#rollTitle .slot{height:1em;overflow:hidden}
+#rollTitle .strip{display:block;will-change:transform}
+#rollTitle .cell{display:block;height:1em;line-height:1}
+.equip-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;position:relative;z-index:3;will-change:transform,opacity}
+.equip{border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:16px 14px 14px;
+  background:rgba(255,255,255,.02);cursor:pointer;position:relative;
+  --mx:50%;--my:50%;transform-style:preserve-3d;
+  -webkit-tap-highlight-color:transparent;
+  transition:transform .18s ease-out,border-color .3s ease,background .3s ease}
+.equip:hover{border-color:rgba(255,194,71,.4)}
+/* 聚光跟随：琥珀辉光随光标在卡片内移动 */
+.equip::after{content:'';position:absolute;inset:0;border-radius:14px;pointer-events:none;
+  background:radial-gradient(200px circle at var(--mx) var(--my),rgba(255,194,71,.16),transparent 62%);
+  opacity:0;transition:opacity .35s ease}
+.equip:hover::after{opacity:1}
+/* 点选脉冲：琥珀光圈扩散 */
+.equip.pulse{animation:cardPulse .65s ease-out}
+@keyframes cardPulse{
+  0%{box-shadow:0 0 0 0 rgba(255,194,71,.55),0 0 24px rgba(255,194,71,.3)}
+  100%{box-shadow:0 0 0 20px rgba(255,194,71,0),0 0 24px rgba(255,194,71,0)}
+}
+.equip .idx{font-family:var(--font-display);font-size:12px;letter-spacing:.14em;color:var(--accent);
+  font-variant-numeric:tabular-nums;transition:color .3s ease}
+.equip .en{margin-top:9px;font-family:var(--font-display);font-size:calc(var(--pw)*.038);
+  letter-spacing:.05em;text-transform:uppercase;line-height:1.25;transition:color .3s ease}
+.equip .cn{margin-top:6px;font-weight:800;font-size:calc(var(--pw)*.04);letter-spacing:.1em;transition:color .3s ease}
+.equip .fn{margin-top:8px;font-size:calc(var(--pw)*.031);line-height:1.7;color:var(--ink-dim);
+  letter-spacing:.03em;transition:color .3s ease}
+
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div class="caption">​‌​​​‌​‌​‌​​​​​‌​‌​‌​‌‌​​‌​​​​​‌​‌​​‌‌‌​​​‌‌​​‌​​​‌‌​​​​​​‌‌​​‌​​​‌‌​‌‌​测试-设备方面 · 手机端演示（真机全屏，无此模拟屏）</div>
+  <div id="phoneWrap">
+    <div class="island"></div>
+    <div id="phone">
+
+      <!-- 首页：经纬仪 -->
+      <section id="hero">
+        <div class="stage"><canvas id="theoCanvas"></canvas></div>
+        <div class="hero-head" id="heroHead">
+          <div class="line"><span class="en">Theodolite · Surveying</span></div>
+          <div class="line"><span class="cn">​‌​​​‌​‌​‌​​​​​‌​‌​‌​‌‌​​‌​​​​​‌​‌​​‌‌‌​​​‌‌​​‌​​​‌‌​​​​​​‌‌​​‌​​​‌‌​‌‌​经纬仪 · 测量放线</span></div>
+          <div class="line"><span class="sub">安装定位第一道工序 —— 角度测量 · 坐标放线</span></div>
+        </div>
+        <div class="mouse-hint" id="mouseHint">
+          <div class="arrows"><i></i><i></i></div>
+          <svg width="26" height="40" viewBox="0 0 26 40" fill="none">
+            <rect x="1.5" y="1.5" width="23" height="37" rx="11.5" stroke="rgba(255,255,255,.6)" stroke-width="1.5"/>
+            <line x1="13" y1="9" x2="13" y2="17" stroke="#ffc247" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <p>左右移动 · 转动经纬仪</p>
+        </div>
+        <div class="scroll-hint" id="scrollHint">
+          <div class="wheel-ico"><i></i></div>
+          <p id="scrollText">下滑 · 设备进场</p>
+          <div class="fail-dots" id="failDots"><i></i><i></i><i></i></div>
+        </div>
+      </section>
+
+      <!-- 合并序列：提升机转场(1-91)无缝接收尾(92-300) + 停留段 -->
+      <section id="sequence">
+        <div class="sticky">
+
+          <!-- 设备清单（下层，四向车驶过时显现） -->
+          <div id="seqFinal">
+            <div class="final-inner" id="gooArea">
+              <div class="final-head">
+                <div class="en" id="rollTitle"></div>
+                <div class="zh">设备清单 · 从吊装到存储的全流程协同</div>
+              </div>
+              <div class="equip-grid" id="equipGrid">
+                <div class="equip" data-i="0"><div class="idx">01</div><div class="en">Truck Crane</div><div class="cn">汽车吊</div><div class="fn">大件设备吊装就位，高空作业主力起重设备</div></div>
+                <div class="equip" data-i="1"><div class="idx">02</div><div class="en">Forklift</div><div class="cn">叉车</div><div class="fn">地面装卸与短驳搬运，衔接设备进出场</div></div>
+                <div class="equip" data-i="2"><div class="idx">03</div><div class="en">Control Cabinet</div><div class="cn">电控柜</div><div class="fn">全库电气控制中枢，调度每台设备指令</div></div>
+                <div class="equip" data-i="3"><div class="idx">04</div><div class="en">Stacker Crane</div><div class="cn">堆垛机</div><div class="fn">巷道内自动存取货箱，核心存储设备</div></div>
+                <div class="equip" data-i="4"><div class="idx">05</div><div class="en">Four-way Shuttle</div><div class="cn">四向穿梭车</div><div class="fn">货架层内四向行驶，密集存储灵活搬运</div></div>
+                <div class="equip" data-i="5"><div class="idx">06</div><div class="en">Vertical Lift</div><div class="cn">提升机</div><div class="fn">货物垂直输送，贯通多层楼板货架高度</div></div>
+                <div class="equip" data-i="6"><div class="idx">07</div><div class="en">Chain Conveyor</div><div class="cn">链条输送机</div><div class="fn">托盘链条输送，衔接拆叠盘与存储工序</div></div>
+                <div class="equip" data-i="7"><div class="idx">08</div><div class="en">Pallet Destacker</div><div class="cn">拆叠盘机</div><div class="fn">托盘自动拆叠供给，保障物流节拍连续</div></div>
+              </div>
+            </div>
+          </div>
+
+          <canvas id="seqCanvas"></canvas>
+
+          <div class="sys-title" id="sysTitle">
+            <div class="line"><span class="en">Smart Storage System</span></div>
+            <div class="line"><span class="cn">立体库设备系统</span></div>
+            <div class="line"><span class="sub">吊装 · 搬运 · 存储 · 测量，全流程设备协同</span></div>
+          </div>
+
+          <!-- 设备名称标签层（弹出→坠落→淡出） -->
+          <div id="devLabels"></div>
+
+          <div class="lift-copy" id="liftCopy">
+            <div class="line"><span class="en">Vertical Lift</span></div>
+            <div class="line"><span class="cn">提升机</span></div>
+            <div class="line"><span class="desc">垂直输送核心设备 —— 载货平台沿导轨升降，<b>贯通多层货架</b>，出入库效率的竖向动脉</span></div>
+          </div>
+
+        </div>
+      </section>
+
+    </div><!-- /#phone -->
+
+    <div id="loader">
+      <div class="ld-tag">Device Showcase</div>
+      <div class="ld-num" id="ldNum">0%</div>
+      <div class="ld-bar"><i id="ldBar"></i></div>
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/gsap.min.js"></script>
+<script src="assets/js/matter.min.js"></script>
+<script>
+/* ============================================================
+   脚本总控 v2
+   ============================================================ */
+
+/* ---------- 0. 全局状态 ---------- */
+const IS_TOUCH = matchMedia('(hover: none) and (pointer: coarse)').matches;
+if(IS_TOUCH || innerWidth<=768) document.body.classList.add('mobile');
+let introExited=false, unlocked=false;
+
+const phoneEl=document.getElementById('phone');
+function setPhoneVars(){
+  const r=phoneEl.getBoundingClientRect();
+  document.documentElement.style.setProperty('--pw', r.width+'px');
+  document.documentElement.style.setProperty('--ph', r.height+'px');
+}
+setPhoneVars();
+
+/* ---------- 1. 加载计数器 ---------- */
+let loadDone=0, loadTotal=0, allQueued=false, loadSettled=false;
+const ldNum=document.getElementById('ldNum'), ldBar=document.getElementById('ldBar');
+function tickLoad(){
+  if(!loadTotal) return;
+  let p=Math.round(loadDone/loadTotal*100);
+  if(!allQueued) p=Math.min(p,99);
+  p=Math.min(100,p);
+  ldNum.textContent=p+'%'; ldBar.style.width=p+'%';
+  if(allQueued && loadDone>=loadTotal){ loadSettled=true; tryIntroExit(); }
+}
+function addLoad(n){ loadTotal+=n; tickLoad(); }
+function doneLoad(){ loadDone++; tickLoad(); }
+
+/* ---------- 2. 序列帧定义（theo独立；lift+ending合并为300帧序列） ---------- */
+const SEQ={
+  theo:{dir:'theo_webp', total:162, pad:4, imgs:[], drawn:-1, current:1, target:1},
+  lift:{dir:'lift_webp', total:91,  pad:3, imgs:[]},
+  end: {dir:'ending_webp',total:209,pad:3, imgs:[]},
+};
+const SEQ_TOTAL=300;                       // 合并序列总帧数
+function seqImg(n){ return n<=91 ? SEQ.lift.imgs[n] : SEQ.end.imgs[n-91]; }
+function preloadSeq(set,key,dir,total,pad,onFirst){
+  for(let i=1;i<=total;i++){
+    const img=new Image();
+    img.src='assets/'+dir+'/frame_'+String(i).padStart(pad,'0')+'.webp';
+    addLoad(1);
+    if(i===1 && onFirst){
+      img.onload=()=>{ doneLoad(); onFirst(); };
+      img.onerror=doneLoad;
+    }else{
+      img.onload=img.onerror=doneLoad;
+    }
+    set[key].imgs[i]=img;
+  }
+}
+addLoad(1);
+(document.fonts&&document.fonts.ready)?document.fonts.ready.then(doneLoad).catch(doneLoad):doneLoad();
+preloadSeq(SEQ,'theo','theo_webp',162,4, ()=>{SEQ.theo.drawn=-1;drawIfChanged(SEQ.theo,SEQ.theo,1,0.12);});
+preloadSeq(SEQ,'lift','lift_webp',91,3, null);
+preloadSeq(SEQ,'end','ending_webp',209,3, ()=>drawMerged(Math.round(seqFrameF)));
+allQueued=true; tickLoad();
+
+/* ---------- 3. 画布绘制 ---------- */
+const DPR=Math.min(2, window.devicePixelRatio||1);
+function setupCanvas(el){
+  const rect=el.getBoundingClientRect();
+  el.width=Math.round(rect.width*DPR); el.height=Math.round(rect.height*DPR);
+  return {W:el.width,H:el.height,ctx:el.getContext('2d')};
+}
+function fitDraw2(cv, img, padTop){
+  if(!img || !img.complete || !cv.ctx) return false;   // 未加载完不画也不占坑
+  cv.ctx.clearRect(0,0,cv.W,cv.H);
+  const iw=img.naturalWidth, ih=img.naturalHeight;
+  const availH=cv.H*(1-(padTop||0));
+  const scale=Math.min(cv.W/iw, availH/ih);
+  const dw=iw*scale, dh=ih*scale;
+  cv.ctx.drawImage(img, (cv.W-dw)/2, (padTop||0)*cv.H+(availH-dh)/2, dw, dh);
+  return true;
+}
+function drawIfChanged(cv,s,n,padTop){
+  if(n!==s.drawn && fitDraw2(cv, s.imgs[n], padTop)) s.drawn=n;  // 画成功才记账，防竞态卡帧
+}
+const theoEl=document.getElementById('theoCanvas');
+SEQ.theo.el=theoEl; Object.assign(SEQ.theo, setupCanvas(theoEl));
+const seqEl=document.getElementById('seqCanvas');
+const seqCV=setupCanvas(seqEl); seqCV.el=seqEl;
+let seqDrawn=-1;
+function drawMerged(n){
+  n=Math.max(1,Math.min(SEQ_TOTAL,Math.round(n)));
+  if(n===seqDrawn) return;
+  if(fitDraw2(seqCV, seqImg(n))) seqDrawn=n;   // 画成功才记账
+}
+
+/* ---------- 4. 首页经纬仪交互 ---------- */
+function pointToFrame(clientX){
+  const r=theoEl.getBoundingClientRect();
+  const nx=Math.min(1,Math.max(0,(clientX-r.left)/r.width));
+  return 1+nx*(SEQ.theo.total-1);
+}
+let lastMX=null, accMouseX=0;
+window.addEventListener('mousemove', e=>{
+  SEQ.theo.target=pointToFrame(e.clientX);
+  if(lastMX!==null) accMouseX+=Math.abs(e.clientX-lastMX);
+  lastMX=e.clientX;
+},{passive:true});
+window.addEventListener('touchmove', e=>{
+  if(e.touches&&e.touches[0]) SEQ.theo.target=pointToFrame(e.touches[0].clientX);
+},{passive:true});
+function theoShake(){
+  gsap.fromTo('#theoCanvas',{x:0},{x:-7,duration:0.055,repeat:3,yoyo:true,ease:'power1.inOut',
+    onComplete(){ gsap.to('#theoCanvas',{x:0,duration:0.18,ease:'power2.out'}); }});
+  gsap.fromTo('#theoCanvas',{scale:1},{scale:1.012,duration:0.12,yoyo:true,repeat:1,ease:'power2.out',
+    clearProps:'scale'});
+}
+
+/* ---------- 5. 3次滚轮失效 → 解锁 ---------- */
+const scrollHint=document.getElementById('scrollHint');
+const scrollText=document.getElementById('scrollText');
+const failDots=document.getElementById('failDots');
+const dotEls=failDots.querySelectorAll('i');
+let failCount=0;
+phoneEl.addEventListener('wheel', e=>{
+  if(!introExited) return;
+  if(unlocked || IS_TOUCH) return;
+  if(e.deltaY<=0) return;
+  e.preventDefault();
+  failCount++;
+  failDots.classList.add('vis');
+  if(failCount<=3){
+    dotEls[failCount-1].classList.add('on');
+    theoShake();
+    gsap.fromTo('#scrollText',{y:0},{y:5,duration:0.09,yoyo:true,repeat:1,clearProps:'y'});
+  }
+  if(failCount>=3) unlockScroll();
+},{passive:false});
+function unlockScroll(){
+  if(unlocked) return;
+  unlocked=true;
+  failDots.classList.add('done');
+  scrollText.textContent='已解锁 · 继续下滑';
+  setTimeout(()=>{ scrollHint.classList.add('gone'); },900);
+  setTimeout(()=>{ scrollHint.style.display='none'; },1700);
+}
+if(IS_TOUCH){ unlocked=true; scrollText.textContent='滑动屏幕 · 设备进场'; }
+
+/* ---------- 6. 合并序列擦洗（手动scroll监听，滚动源=#phone，比ScrollTrigger可靠） ---------- */
+let seqFrameF=1;                            // 当前序列帧（浮点）
+let stayPv=0;                               // 停留段进度0-1（choreo用于卡片退出/标题滚筒）
+const seqSecEl=document.getElementById('sequence');
+const finalHead=document.querySelector('.final-head');
+let stayDist=300;                           // 停留段标题下移总距离，layoutSequence按手机壳重设
+function layoutSequence(){                  // 高度锚定手机壳：5.7屏擦洗行程 + 1屏停留
+  seqSecEl.style.height=(phoneEl.clientHeight*6.7)+'px';
+  stayDist=phoneEl.clientHeight*0.42;
+}
+function updateScrub(){
+  const pr=phoneEl.getBoundingClientRect();
+  const rel=pr.top-seqSecEl.getBoundingClientRect().top;    // 序列顶过手机屏顶后的滚动量
+  const travel=seqSecEl.offsetHeight-phoneEl.clientHeight;  // 总行程（含停留）
+  const p=Math.max(0,Math.min(1,rel/Math.max(1,travel)));
+  const SCRUB=5.7/6.7;                      // 前85.07%行程映射300帧
+  seqFrameF=p<=SCRUB ? 1+p/SCRUB*(SEQ_TOTAL-1) : SEQ_TOTAL;
+  // 停留段：标题随滚动实时下移，覆盖卡片框
+  stayPv=p<=SCRUB ? 0 : Math.min(1,(p-SCRUB)/(1-SCRUB));
+  finalHead.style.transform='translateY('+(stayPv*stayDist).toFixed(1)+'px)';
+}
+phoneEl.addEventListener('scroll',updateScrub,{passive:true});
+
+/* ---------- 7. 设备名称标签：数据 / 弹出 / 坠落 / 淡出 ---------- */
+/* pop/fall 均按"由中间到外围"次序：拆叠盘机→链条输送机→叉车→水平仪→电控柜→堆垛机 */
+const DEVICES=[
+  {cn:'电控柜',    en:'Control Cabinet', x:12, pop:146, fall:251},
+  {cn:'叉车',      en:'Forklift',        x:27, pop:134, fall:243},
+  {cn:'拆叠盘机',  en:'Pallet Destacker',x:43, pop:122, fall:235},
+  {cn:'链条输送机',en:'Chain Conveyor',  x:59, pop:128, fall:239},
+  {cn:'水平仪',    en:'Level Instrument',x:74, pop:140, fall:247},
+  {cn:'堆垛机',    en:'Stacker Crane',   x:88, pop:152, fall:255},
+];
+const FALL_RESET=225, LABEL_GONE=262;
+const labelsLayer=document.getElementById('devLabels');
+const labelEls=DEVICES.map((d,i)=>{
+  const el=document.createElement('div');
+  el.className='dev-label';
+  el.style.left=d.x+'%';
+  el.style.top=(i%2 ? 28 : 22)+'%';       // 双排交错，防水平拥挤重叠
+  el.dataset.top=(i%2 ? 28 : 22)+'%';
+  el.innerHTML=`<span class="cn">${d.cn}</span><span class="en">${d.en}</span>`;
+  labelsLayer.appendChild(el);
+  return el;
+});
+const labelState=DEVICES.map(()=>({shown:false,dropped:false}));
+let fallState='idle';                       // idle | falling | done
+let engine=null, labelBodies=[];
+
+function popLabel(el,i){
+  // 边缘钳制：标签整体收进屏内，短须用--stem-x保持指向设备中心
+  const lw=el.offsetWidth, half=lw/2;
+  const W=labelsLayer.clientWidth;
+  const cx=DEVICES[i].x/100*W;                       // 设备锚点（原始中心）
+  const cx2=Math.max(half+6,Math.min(W-half-6,cx));  // 钳制后的标签中心
+  el.style.left=cx2+'px';
+  el.style.setProperty('--stem-x',(half+(cx-cx2))+'px');
+  el.style.opacity='1';
+  gsap.fromTo(el,{xPercent:-50,scale:0,y:-14},
+    {xPercent:-50,scale:1,y:0,duration:.55,ease:'back.out(2.2)'});  // xPercent保居中，防gsap覆盖transform
+}
+function hideLabel(el){
+  gsap.killTweensOf(el);
+  el.style.opacity='0';
+  el.style.transform='translate(-50%,0) scale(0)';
+}
+function dropLabel(i){
+  // 首个坠落的标签懒建物理引擎与边界墙
+  if(!engine){
+    fallState='falling';
+    const W=seqCV.W/DPR, H=seqCV.H/DPR;      // 物理世界用CSS像素
+    engine=Matter.Engine.create();
+    engine.world.gravity.y=1.3;
+    const opts={isStatic:true};
+    Matter.World.add(engine.world,[
+      Matter.Bodies.rectangle(W/2,H+30,W*2,60,opts),
+      Matter.Bodies.rectangle(-30,H/2,60,H*2,opts),
+      Matter.Bodies.rectangle(W+30,H/2,60,H*2,opts),
+    ]);
+    labelBodies=[];
+  }
+  const el=labelEls[i];
+  el.classList.add('phys');
+  el.style.pointerEvents='auto';
+  const r=el.getBoundingClientRect(), lr=labelsLayer.getBoundingClientRect();
+  const bw=Math.max(60,r.width), bh=Math.max(30,r.height);
+  const body=Matter.Bodies.rectangle(
+    r.left-lr.left+r.width/2, r.top-lr.top+r.height/2, bw, bh,
+    {restitution:.45,friction:.35,frictionAir:.012,chamfer:{radius:10}});
+  Matter.Body.setAngularVelocity(body,(Math.random()-.5)*.12);
+  Matter.Body.setVelocity(body,{x:(Math.random()-.5)*2.5,y:0});
+  Matter.World.add(engine.world,body);
+  labelBodies.push({el,body});
+}
+function syncLabelPhysics(){
+  if(fallState!=='falling'&&fallState!=='done') return;
+  Matter.Engine.update(engine,16.7);
+  labelBodies.forEach(({el,body})=>{
+    el.style.left=body.position.x+'px';
+    el.style.top=body.position.y+'px';
+    el.style.transform=`translate(-50%,-50%) rotate(${body.angle}rad)`;
+  });
+}
+function resetLabels(){                     // 回滚复位
+  fallState='idle';
+  if(engine){ Matter.World.clear(engine.world,false); Matter.Engine.clear(engine); engine=null; }
+  labelBodies=[];
+  labelEls.forEach((el,i)=>{
+    el.classList.remove('phys');
+    el.style.cssText='';                    // 清物理inline样式，回CSS定位
+    el.style.left=DEVICES[i].x+'%';         // cssText清掉了x定位，需恢复
+    el.style.top=el.dataset.top;            // 恢复双排交错top
+    el.style.pointerEvents='none';
+    el.style.opacity='0';
+    el.style.transform='translate(-50%,0) scale(0)';
+  });
+  labelState.forEach(s=>{s.shown=false;s.dropped=false;});
+}
+// 坠落后点按弹散（替代拖拽，避免与滚动手势冲突）
+labelsLayer.addEventListener('click', e=>{
+  if(fallState!=='done') return;
+  const lb=labelBodies.find(({el})=>el.contains(e.target));
+  if(!lb) return;
+  Matter.Body.applyForce(lb.body, lb.body.position,
+    {x:(Math.random()-.5)*.02, y:-.028*Math.max(1,lb.body.mass*.4)});
+});
+
+/* ---------- 8. 卡片交互：聚光跟随 + 磁吸倾斜 + 点选脉冲 ---------- */
+const equipEls=[...document.querySelectorAll('.equip')];
+const CAN_HOVER=matchMedia('(hover: hover)').matches;
+if(CAN_HOVER){
+  equipEls.forEach(card=>{
+    // 光标在卡内移动：琥珀聚光跟随 + 卡片朝向光标轻微倾斜
+    card.addEventListener('mousemove',e=>{
+      const r=card.getBoundingClientRect();
+      const px=(e.clientX-r.left)/r.width, py=(e.clientY-r.top)/r.height;
+      card.style.setProperty('--mx',(px*100).toFixed(1)+'%');
+      card.style.setProperty('--my',(py*100).toFixed(1)+'%');
+      card.style.transform='perspective(620px) rotateX('+((.5-py)*7).toFixed(2)+'deg) rotateY('+((px-.5)*7).toFixed(2)+'deg) translateY(-2px)';
+    });
+    card.addEventListener('mouseleave',()=>{ card.style.transform=''; });
+  });
+}
+equipEls.forEach(card=>{
+  // 点选：琥珀光圈脉冲扩散（触屏/鼠标通用触发反馈）
+  card.addEventListener('click',()=>{
+    if(!seqFinal.classList.contains('interactive')) return;
+    card.classList.remove('pulse'); void card.offsetWidth;   // 重触发动画
+    card.classList.add('pulse');
+    setTimeout(()=>card.classList.remove('pulse'),700);
+  });
+});
+
+/* ---------- 8.5 末页标题滚筒翻转：EQUIPMENT LIST → THANK YOU ---------- */
+/* THANK(白)对应PMENT槽位，YOU(黄)对应IST槽位；多余字母(EQUI/L)淡出消失 */
+const rollTitleEl=document.getElementById('rollTitle');
+const ROLL_MAP=[
+  ['E',null,0,0],['Q',null,0,0],['U',null,0,0],['I',null,0,0],
+  ['P','T',0,1],['M','H',0,1],['E','A',0,1],['N','N',0,1],['T','K',0,1],
+  [' ',null,0,0],
+  ['L',null,1,0],
+  ['I','Y',1,1],['S','O',1,1],['T','U',1,1],
+];
+const rollSlots=[], fadeLts=[];
+(function buildRollTitle(){
+  const ab='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  ROLL_MAP.forEach(([from,to,yellow,isRoll])=>{
+    if(!isRoll){
+      const s=document.createElement('span');
+      s.className='lt'+(yellow?' yl':'');
+      s.textContent=(from===' ')?'\u00A0':from;
+      if(from!==' ') fadeLts.push(s);            // 多余字母记录淡出（空格除外）
+      rollTitleEl.appendChild(s);
+      return;
+    }
+    const slot=document.createElement('span'); slot.className='slot'+(yellow?' yl':'');
+    const strip=document.createElement('span'); strip.className='strip';
+    const cells=[from];
+    for(let k=0;k<24;k++) cells.push(ab[(Math.random()*26)|0]);   // 滚筒翻转24个字母
+    cells.push(to);
+    cells.forEach(ch=>{
+      const c=document.createElement('span'); c.className='cell'; c.textContent=ch;
+      strip.appendChild(c);
+    });
+    slot.appendChild(strip); rollTitleEl.appendChild(slot);
+    rollSlots.push({strip,n:cells.length});
+  });
+})();
+function applyTitleRoll(p){
+  rollSlots.forEach(({strip,n})=>{
+    strip.style.transform='translateY(-'+(p*(n-1)).toFixed(3)+'em)';
+  });
+  const fo=Math.max(0,1-p*2.6);                  // 多余字母在翻转前段快速消失
+  fadeLts.forEach(el=>el.style.opacity=fo.toFixed(3));
+}
+
+/* ---------- 9. 文本编排（帧阈值驱动） ---------- */
+const liftCopy=document.getElementById('liftCopy');
+const sysTitle=document.getElementById('sysTitle');
+const seqFinal=document.getElementById('seqFinal');
+const equipGrid=document.getElementById('equipGrid');
+function clamp01(v){ return Math.max(0,Math.min(1,v)); }
+function choreo(){
+  const f=Math.round(seqFrameF);
+  liftCopy.classList.toggle('shown', f>=10 && f<=80);
+  sysTitle.classList.toggle('shown', f>=173 && f<=256);
+
+  // 设备标签：弹出/隐藏（fallState==='idle'时）+ 按帧逐标签坠落
+  DEVICES.forEach((d,i)=>{
+    const want=f>=d.pop;
+    if(want && !labelState[i].shown && fallState==='idle'){ labelState[i].shown=true; popLabel(labelEls[i],i); }
+    else if(!want && labelState[i].shown && fallState==='idle'){ labelState[i].shown=false; hideLabel(labelEls[i]); }
+  });
+  if(f>=235){
+    DEVICES.forEach((d,i)=>{
+      if(!labelState[i].dropped && f>=d.fall){ labelState[i].dropped=true; dropLabel(i); }
+    });
+  }
+  if(f<FALL_RESET && (fallState==='falling'||fallState==='done')) resetLabels();
+  labelsLayer.style.opacity = f>=LABEL_GONE ? 0 : 1;
+
+  // 物理同步
+  syncLabelPhysics();
+  if(fallState==='falling') fallState='done';   // 引擎已建，转入done（持续同步）
+
+  // 四向车带出设备清单：p=0.5时20%，p=1时100%
+  const sp=clamp01((f-269)/(299-269));
+  const op = sp<=0 ? 0 : (sp<=.5 ? sp*.4 : .2+(sp-.5)*1.6);
+  seqFinal.style.opacity=op;
+
+  // 停留段：卡片随滚动上滑退出并淡化（回滚显影复位）；标题过中线后滚筒翻转为THANK YOU
+  const stayP=stayPv;
+  const exitP=Math.min(1,stayP/.7);
+  equipGrid.style.transform='translateY(-'+(exitP*phoneEl.clientHeight*.8).toFixed(1)+'px)';
+  equipGrid.style.opacity=(1-exitP).toFixed(3);
+  seqFinal.classList.toggle('interactive', op>=.98 && exitP<.3);
+  applyTitleRoll(clamp01((stayP-.55)/.45));   // 后45%行程完成滚筒翻转，可倒放
+}
+
+/* ---------- 10. RAF主循环 ---------- */
+function raf(){
+  SEQ.theo.current += (SEQ.theo.target-SEQ.theo.current)*.085;
+  drawIfChanged(SEQ.theo,SEQ.theo,Math.round(SEQ.theo.current),0.12);
+  drawMerged(seqFrameF);
+  choreo();
+  requestAnimationFrame(raf);
+}
+requestAnimationFrame(raf);
+
+/* ---------- 11. 引导显隐 / 加载完场 / resize ---------- */
+const mouseHint=document.getElementById('mouseHint');
+let hintShown=false, hintGone=false;
+function showHint(){
+  if(hintShown||hintGone||IS_TOUCH) return;
+  hintShown=true; mouseHint.classList.add('show');
+}
+function hideHint(){
+  if(hintGone||!hintShown) return;
+  hintGone=true;
+  mouseHint.classList.remove('show');
+}
+setInterval(()=>{ if(hintShown && accMouseX>140) hideHint(); },300);   // 左右移动过后才收起
+
+let minTimeDone=false;
+function tryIntroExit(){
+  if(introExited||!loadSettled||!minTimeDone) return;
+  introExited=true;
+  const ld=document.getElementById('loader');
+  ld.classList.add('done');
+  setTimeout(()=>ld.remove(),900);
+  setTimeout(()=>{ document.getElementById('heroHead').classList.add('shown'); },350);
+  setTimeout(showHint,900);
+  setTimeout(()=>{ scrollHint.classList.add('show'); },1100);
+}
+setTimeout(()=>{ minTimeDone=true; tryIntroExit(); },1400);
+setTimeout(()=>{ loadSettled=true; tryIntroExit(); },25000);
+
+window.addEventListener('resize', ()=>{
+  setPhoneVars();
+  layoutSequence();
+  Object.assign(SEQ.theo, setupCanvas(theoEl));
+  Object.assign(seqCV, setupCanvas(seqEl));
+  SEQ.theo.drawn=-1; seqDrawn=-1;
+  updateScrub();
+},{passive:true});
+layoutSequence(); updateScrub();
+
+/* ---------- 防盗：隐身水印层（人眼不可见，截图/另存/打印可见=版权证据） ---------- */
+(function(){
+  var wm=document.createElement('div');
+  wm.id='wmLayer'; wm.setAttribute('aria-hidden','true');
+  wm.style.cssText='position:fixed;inset:0;z-index:99999;pointer-events:none;opacity:.02;'
+    +'background-image:url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'200\'%3E%3Ctext x=\'100\' y=\'104\' font-size=\'13\' fill=\'%23ffffff\' text-anchor=\'middle\' transform=\'rotate(-30 100 100)\'%3E%C2%A9%20Eavan%202026%3C/text%3E%3C/svg%3E");'
+    +'background-repeat:repeat';
+  document.body.appendChild(wm);
+})();
+</script>
+</body>
+</html>
